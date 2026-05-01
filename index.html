@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DCEMD — Presupuestos Personales</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ─── RESET & TOKENS ────────────────────────────────────────────────── */
@@ -236,7 +237,26 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 /* ─── FOOTER ─────────────────────────────────────────────────────────── */
 .footer{background:var(--navy);color:rgba(255,255,255,.35);font-size:11px;text-align:center;padding:12px;margin-top:auto;font-family:'DM Mono',monospace;letter-spacing:.3px}
 
-/* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
+/* ─── AUTH SCREEN ─────────────────────────────────────────────────────── */
+#auth-screen{position:fixed;inset:0;background:var(--navy);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+.auth-box{background:#fff;border-radius:18px;padding:36px 40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.auth-logo{font-size:28px;font-weight:700;color:var(--navy);letter-spacing:-.5px;margin-bottom:4px}
+.auth-sub{font-size:12px;color:var(--text3);margin-bottom:28px}
+.auth-tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:2px solid var(--gray-bd)}
+.auth-tab{padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+.auth-tab.active{color:var(--navy);border-bottom-color:var(--navy)}
+.auth-input{width:100%;padding:10px 13px;border:1px solid var(--gray-bd);border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:12px;transition:border .15s}
+.auth-input:focus{border-color:var(--accent-mid)}
+.auth-btn{width:100%;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .2s;margin-top:4px}
+.auth-btn:hover{background:var(--navy2)}
+.auth-btn:disabled{opacity:.6;cursor:not-allowed}
+.auth-msg{font-size:12px;padding:10px 13px;border-radius:var(--radius);margin-top:12px;display:none}
+.auth-msg.error{background:var(--red-bg);color:var(--red);border:1px solid var(--red-bd);display:block}
+.auth-msg.success{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd);display:block}
+.auth-user-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.7)}
+.auth-user-bar strong{color:#fff}
+.auth-logout-btn{font-size:11px;padding:3px 10px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;cursor:pointer;font-family:inherit;transition:all .15s}
+.auth-logout-btn:hover{background:rgba(255,255,255,.2)}
 @media(max-width:700px){
   .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
   .kpi-grid{grid-template-columns:1fr 1fr}
@@ -246,7 +266,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 </style>
 </head>
 <body>
-<div class="app">
+<!-- ════ AUTH SCREEN ════ -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">DCEMD</div>
+    <div class="auth-sub">Presupuestos Personales · Inicia sesión para continuar</div>
+    <div class="auth-tabs">
+      <div class="auth-tab active" onclick="switchAuthTab('login')">Iniciar sesión</div>
+      <div class="auth-tab" onclick="switchAuthTab('register')">Registrarse</div>
+    </div>
+    <!-- Login -->
+    <div id="auth-login-form">
+      <input class="auth-input" id="login-email" type="email" placeholder="Correo electrónico">
+      <input class="auth-input" id="login-pass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')doLogin()">
+      <button class="auth-btn" id="login-btn" onclick="doLogin()">Iniciar sesión</button>
+      <div class="auth-msg" id="login-msg"></div>
+    </div>
+    <!-- Register -->
+    <div id="auth-register-form" style="display:none">
+      <input class="auth-input" id="reg-nombre" type="text" placeholder="Tu nombre">
+      <input class="auth-input" id="reg-email" type="email" placeholder="Correo electrónico">
+      <input class="auth-input" id="reg-pass" type="password" placeholder="Contraseña (mín. 6 caracteres)" onkeydown="if(event.key==='Enter')doRegister()">
+      <button class="auth-btn" id="register-btn" onclick="doRegister()">Crear cuenta</button>
+      <div class="auth-msg" id="register-msg"></div>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none">
 
 <!-- ════ TOPBAR ════ -->
 <nav class="topbar">
@@ -265,6 +312,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
   <div class="topbar-right">
     <span class="month-pill" id="mes-activo">—</span>
     <button class="btn btn-sm" style="background:rgba(255,255,255,.12);color:#fff;font-size:11px" onclick="openModal('modal-cuenta')">+ Cuenta</button>
+    <div class="auth-user-bar">
+      <strong id="topbar-user-name"></strong>
+      <button class="auth-logout-btn" onclick="doLogout()">Salir</button>
+    </div>
   </div>
 </nav>
 
@@ -626,7 +677,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
   </div>
 </div>
 
-</div><!-- end app -->
+</div><!-- end main-app -->
 <div class="footer">DCEMD — Presupuestos Personales · v2.0 · Datos guardados localmente en este navegador</div>
 
 <!-- ══════════════════════════════════════════════════
@@ -2308,19 +2359,338 @@ function showToast(msg) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// INIT
+// MÓDULO 12: SUPABASE — Auth + DB en la nube
 // ═══════════════════════════════════════════════════════════════════════
-(function init() {
-  // Set month pill
+
+const SUPABASE_URL = 'https://qxamovncjrhmxrlmwzcz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_CT-5RUu530a35iH8wxAGzQ_ovY1CF7v';
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+
+// ── AUTH UI ────────────────────────────────────────────────────────────
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.auth-tab:${tab === 'login' ? 'first-child' : 'last-child'}`).classList.add('active');
+  document.getElementById('auth-login-form').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('auth-register-form').style.display = tab === 'register' ? '' : 'none';
+}
+
+function setAuthMsg(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'auth-msg ' + type;
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  if (!email || !pass) { setAuthMsg('login-msg', 'Ingresa tu correo y contraseña', 'error'); return; }
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = 'Ingresando...';
+
+  const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+
+  btn.disabled = false; btn.textContent = 'Iniciar sesión';
+
+  if (error) {
+    const msg = error.message.includes('Invalid') ? 'Correo o contraseña incorrectos' :
+                error.message.includes('confirmed') ? 'Confirma tu correo antes de ingresar' : error.message;
+    setAuthMsg('login-msg', msg, 'error');
+    return;
+  }
+  onLoginSuccess(data.user);
+}
+
+async function doRegister() {
+  const nombre = document.getElementById('reg-nombre').value.trim();
+  const email  = document.getElementById('reg-email').value.trim();
+  const pass   = document.getElementById('reg-pass').value;
+
+  if (!nombre || !email || !pass) { setAuthMsg('register-msg', 'Completa todos los campos', 'error'); return; }
+  if (pass.length < 6) { setAuthMsg('register-msg', 'La contraseña debe tener al menos 6 caracteres', 'error'); return; }
+
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true; btn.textContent = 'Creando cuenta...';
+
+  const { data, error } = await supa.auth.signUp({ email, password: pass, options: { data: { nombre } } });
+
+  btn.disabled = false; btn.textContent = 'Crear cuenta';
+
+  if (error) { setAuthMsg('register-msg', error.message, 'error'); return; }
+
+  // Crear perfil en dcemd_perfiles
+  if (data.user) {
+    await supa.from('dcemd_perfiles').upsert({ id: data.user.id, nombre, email });
+  }
+
+  setAuthMsg('register-msg',
+    '✓ Cuenta creada. Revisa tu correo y confirma tu email antes de iniciar sesión.',
+    'success');
+}
+
+async function doLogout() {
+  await supa.auth.signOut();
+  currentUser = null;
+  // Reset DB local
+  DB = { cuentas:[], transacciones:[], inversiones:[], pagos_inv:[], alerts_state:{}, meses:[] };
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('main-app').style.display = 'none';
+}
+
+function onLoginSuccess(user) {
+  currentUser = user;
+  const nombre = user.user_metadata?.nombre || user.email.split('@')[0];
+  document.getElementById('topbar-user-name').textContent = nombre;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'flex';
+  loadUserData();
+}
+
+// ── CARGAR DATOS DEL USUARIO DESDE SUPABASE ────────────────────────────
+async function loadUserData() {
+  if (!currentUser) return;
+  const uid = currentUser.id;
+
+  const [ctas, trxs, invs, pagos] = await Promise.all([
+    supa.from('dcemd_cuentas').select('*').eq('user_id', uid),
+    supa.from('dcemd_transacciones').select('*').eq('user_id', uid),
+    supa.from('dcemd_inversiones').select('*').eq('user_id', uid),
+    supa.from('dcemd_pagos_inv').select('*').eq('user_id', uid),
+  ]);
+
+  // Mapear snake_case → camelCase para compatibilidad con el código existente
+  DB.cuentas = (ctas.data || []).map(mapCuenta);
+  DB.transacciones = (trxs.data || []).map(mapTrx);
+  DB.inversiones = (invs.data || []).map(mapInv);
+  DB.pagos_inv = (pagos.data || []).map(mapPago);
+
+  refreshAll();
+  showToast('Datos cargados ✓');
+}
+
+// ── MAPPERS snake_case → camelCase ─────────────────────────────────────
+function mapCuenta(r) {
+  return { id:r.id, nombre:r.nombre, tipo:r.tipo, ultimosDigitos:r.ultimos_digitos,
+    saldoInicial:parseFloat(r.saldo_inicial)||0, color:r.color, creadoEn:r.creado_en };
+}
+function mapTrx(r) {
+  return { id:r.id, hash:r.hash, fecha:r.fecha, cuentaId:r.cuenta_id,
+    cuentaDestinoId:r.cuenta_destino_id, desc:r.descripcion, monto:parseFloat(r.monto)||0,
+    tipo:r.tipo, categoria:r.categoria, inter_cuenta:r.inter_cuenta,
+    transfer_group_id:r.transfer_group_id, conciliado:r.conciliado,
+    posible_dup:r.posible_dup, nota:r.nota, origen:r.origen };
+}
+function mapInv(r) {
+  return { id:r.id, cliente:r.cliente, montoInvertido:parseFloat(r.monto_invertido)||0,
+    capitalPendiente:parseFloat(r.capital_pendiente)||0, interesPorc:parseFloat(r.interes_porc)||0,
+    fechaInicio:r.fecha_inicio, fechaProximoPago:r.fecha_proximo_pago, frecuencia:r.frecuencia,
+    cuentaId:r.cuenta_id, estado:r.estado, totalInteresesCobrados:parseFloat(r.total_intereses_cobrados)||0,
+    nota:r.nota };
+}
+function mapPago(r) {
+  return { id:r.id, inversionId:r.inversion_id, fecha:r.fecha,
+    monto:parseFloat(r.monto)||0, tipoPago:r.tipo_pago, nota:r.nota };
+}
+
+// ── OVERRIDE SAVE FUNCTIONS → guardar en Supabase ─────────────────────
+
+// Guardar cuenta
+const _origSaveCuenta = saveCuenta;
+saveCuenta = async function() {
+  const nombre = document.getElementById('c-nombre').value.trim();
+  if (!nombre) { alert('Ingresa el nombre de la cuenta'); return; }
+  const color = document.querySelector('#c-color-picker .color-swatch.selected')?.dataset.color || '#1d4ed8';
+  const { data, error } = await supa.from('dcemd_cuentas').insert({
+    user_id: currentUser.id,
+    nombre,
+    tipo: document.getElementById('c-tipo').value,
+    ultimos_digitos: document.getElementById('c-num').value.trim() || '????',
+    saldo_inicial: parseFloat(document.getElementById('c-saldo').value) || 0,
+    color,
+  }).select().single();
+  if (error) { showToast('Error: ' + error.message); return; }
+  DB.cuentas.push(mapCuenta(data));
+  closeModal('modal-cuenta'); refreshAll(); showToast('Cuenta guardada ✓');
+};
+
+// Guardar transacción manual
+const _origSaveTrx = saveTrxManual;
+saveTrxManual = async function() {
+  const monto = parseFloat(document.getElementById('t-monto').value);
+  const desc  = document.getElementById('t-desc').value.trim();
+  const fecha = document.getElementById('t-fecha').value;
+  const tipo  = document.getElementById('t-tipo').value;
+  const cuentaId = document.getElementById('t-cuenta').value;
+  if (!desc || !monto || !fecha || !cuentaId) { alert('Completa todos los campos'); return; }
+  const inter_cuenta = tipo === 'transferencia';
+  const hash = makeHash(fecha, monto, desc, cuentaId);
+  const dup  = DB.transacciones.some(t => t.hash === hash);
+  const { data, error } = await supa.from('dcemd_transacciones').insert({
+    user_id: currentUser.id, cuenta_id: cuentaId,
+    cuenta_destino_id: tipo === 'transferencia' ? document.getElementById('t-cuenta2').value : null,
+    fecha, descripcion: desc, monto, tipo,
+    categoria: document.getElementById('t-categoria').value || 'Otros gastos',
+    inter_cuenta, hash, posible_dup: dup,
+    nota: document.getElementById('t-nota').value.trim(), origen: 'manual',
+  }).select().single();
+  if (error) { showToast('Error: ' + error.message); return; }
+  DB.transacciones.push(mapTrx(data));
+  closeModal('modal-trx'); refreshAll();
+  showToast(dup ? '⚠ Guardado (posible duplicado)' : 'Transacción guardada ✓');
+};
+
+// Guardar inversión
+const _origSaveInv = saveInversion;
+saveInversion = async function() {
+  const cliente = document.getElementById('i-cliente').value.trim();
+  const monto   = parseFloat(document.getElementById('i-monto').value) || 0;
+  if (!cliente || !monto) { alert('Ingresa cliente y monto'); return; }
+  const { data, error } = await supa.from('dcemd_inversiones').insert({
+    user_id: currentUser.id, cliente, monto_invertido: monto, capital_pendiente: monto,
+    interes_porc: parseFloat(document.getElementById('i-interes').value) || 0,
+    fecha_inicio: document.getElementById('i-fecha-ini').value || today(),
+    fecha_proximo_pago: document.getElementById('i-fecha-pago').value || addDays(today(), 30),
+    frecuencia: document.getElementById('i-frecuencia').value,
+    cuenta_id: document.getElementById('i-cuenta').value || null,
+    estado: 'activo', nota: document.getElementById('i-nota').value.trim(),
+  }).select().single();
+  if (error) { showToast('Error: ' + error.message); return; }
+  DB.inversiones.push(mapInv(data));
+  closeModal('modal-inv'); refreshAll(); showToast('Inversión guardada ✓');
+};
+
+// Guardar pago de inversión
+const _origSavePago = savePagoInversion;
+savePagoInversion = async function() {
+  const invId = document.getElementById('pago-inv-id').value;
+  const inv   = getInversion(invId);
+  if (!inv) return;
+  const monto    = parseFloat(document.getElementById('pago-monto').value) || 0;
+  const tipoPago = document.getElementById('pago-tipo').value;
+  const fecha    = document.getElementById('pago-fecha').value;
+  if (!monto) { alert('Ingresa el monto'); return; }
+
+  // Insertar pago
+  const { data: pagoData, error: pagoErr } = await supa.from('dcemd_pagos_inv').insert({
+    user_id: currentUser.id, inversion_id: invId, fecha, monto, tipo_pago: tipoPago,
+    nota: document.getElementById('pago-nota').value.trim(),
+  }).select().single();
+  if (pagoErr) { showToast('Error: ' + pagoErr.message); return; }
+  DB.pagos_inv.push(mapPago(pagoData));
+
+  // Actualizar inversión
+  const diasFrec = inv.frecuencia === 'semanal' ? 7 : inv.frecuencia === 'quincenal' ? 15 : 30;
+  const updates = { total_intereses_cobrados: (inv.totalInteresesCobrados || 0) + (tipoPago === 'interes' ? monto : 0) };
+  if (tipoPago === 'abono' || tipoPago === 'total') {
+    updates.capital_pendiente = tipoPago === 'total' ? 0 : Math.max(0, (inv.capitalPendiente || 0) - monto);
+    updates.estado = updates.capital_pendiente === 0 ? 'cerrado' : 'activo';
+  }
+  if (updates.estado !== 'cerrado') updates.fecha_proximo_pago = addDays(fecha, diasFrec);
+
+  await supa.from('dcemd_inversiones').update(updates).eq('id', invId);
+  Object.assign(inv, mapInv({ ...inv, ...updates, monto_invertido: inv.montoInvertido,
+    interes_porc: inv.interesPorc, fecha_inicio: inv.fechaInicio,
+    fecha_proximo_pago: updates.fecha_proximo_pago || inv.fechaProximoPago,
+    total_intereses_cobrados: updates.total_intereses_cobrados,
+    capital_pendiente: updates.capital_pendiente ?? inv.capitalPendiente }));
+
+  closeModal('modal-pago-inv'); refreshAll(); showToast('Pago registrado ✓');
+};
+
+// Toggle conciliado
+const _origToggleConcil = toggleConciliado;
+toggleConciliado = async function(id) {
+  const t = DB.transacciones.find(t => t.id === id);
+  if (!t) return;
+  t.conciliado = !t.conciliado;
+  await supa.from('dcemd_transacciones').update({ conciliado: t.conciliado }).eq('id', id);
+  refreshAll();
+};
+
+// Eliminar cuenta
+const _origDelCuenta = deleteCuenta;
+deleteCuenta = async function(id) {
+  if (!confirm('¿Eliminar esta cuenta y todos sus movimientos?')) return;
+  await supa.from('dcemd_cuentas').delete().eq('id', id);
+  DB.cuentas = DB.cuentas.filter(c => c.id !== id);
+  DB.transacciones = DB.transacciones.filter(t => t.cuentaId !== id && t.cuentaDestinoId !== id);
+  refreshAll(); showToast('Cuenta eliminada');
+};
+
+// Eliminar transacción
+const _origDelTrx = deleteTrx;
+deleteTrx = async function(id) {
+  if (!confirm('¿Eliminar esta transacción?')) return;
+  await supa.from('dcemd_transacciones').delete().eq('id', id);
+  DB.transacciones = DB.transacciones.filter(t => t.id !== id);
+  refreshAll();
+};
+
+// Guardar mes importado
+const _origSaveMes = saveMes;
+saveMes = async function() {
+  if (!currentUser) return;
+  const mesLabel = MESES_NAMES[parseInt(cargaMes)] + ' ' + cargaAno;
+
+  // Insertar todas las filas en Supabase
+  const rows = allRows.map(r => ({
+    user_id: currentUser.id,
+    cuenta_id: r.cuentaId,
+    fecha: r.fecha,
+    descripcion: r.desc,
+    monto: r.monto,
+    tipo: r.tipo,
+    categoria: r.categoria,
+    inter_cuenta: r.inter_cuenta,
+    hash: r.hash,
+    posible_dup: r.posible_dup,
+    conciliado: false,
+    origen: 'importado',
+  }));
+
+  const { data, error } = await supa.from('dcemd_transacciones').insert(rows).select();
+  if (error) { showToast('Error al guardar: ' + error.message); return; }
+
+  DB.transacciones.push(...(data || []).map(mapTrx));
+  DB.meses.unshift({ key: cargaAno+'-'+cargaMes+'-'+cargaCuentaId, label: mesLabel, cuentaId: cargaCuentaId, rows: rows.length });
+
+  const el = document.getElementById('save-confirm');
+  if (el) {
+    el.style.display = '';
+    el.innerHTML = `<div style="background:var(--green-bg);border:1px solid var(--green-bd);border-radius:var(--radius);padding:14px 16px;font-size:13px;color:var(--green)">
+      <strong>${mesLabel} guardado — ${rows.length} movimientos importados.</strong>
+      <div style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="goStepCarga(0)">Ver meses cargados</button></div>
+    </div>`;
+  }
+  allRows = []; refreshAll(); showToast(mesLabel + ' importado ✓');
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// INIT con Supabase
+// ═══════════════════════════════════════════════════════════════════════
+(async function init() {
   const now = new Date();
   document.getElementById('mes-activo').textContent =
     now.toLocaleString('es-PA', { month: 'short' }).toUpperCase() + ' ' + now.getFullYear();
 
-  // Render initial view
-  renderDashboard();
+  // Verificar sesión activa
+  const { data: { session } } = await supa.auth.getSession();
+  if (session?.user) {
+    onLoginSuccess(session.user);
+  }
 
-  // Update alert badge on load
-  setTimeout(() => renderAlerts(document.createElement('div')), 100);
+  // Escuchar cambios de auth
+  supa.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session?.user) {
+      onLoginSuccess(session.user);
+    }
+    if (event === 'SIGNED_OUT') {
+      document.getElementById('auth-screen').style.display = 'flex';
+      document.getElementById('main-app').style.display = 'none';
+    }
+  });
 })();
 </script>
 </body>
