@@ -2497,8 +2497,7 @@ function mapPago(r) {
 // ── OVERRIDE SAVE FUNCTIONS → guardar en Supabase ─────────────────────
 
 // Guardar cuenta
-const _origSaveCuenta = saveCuenta;
-saveCuenta = async function() {
+async function saveCuenta() {
   const nombre = document.getElementById('c-nombre').value.trim();
   if (!nombre) { alert('Ingresa el nombre de la cuenta'); return; }
   const color = document.querySelector('#c-color-picker .color-swatch.selected')?.dataset.color || '#1d4ed8';
