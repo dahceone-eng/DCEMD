@@ -2496,10 +2496,11 @@ function mapPago(r) {
 
 // ── OVERRIDE SAVE FUNCTIONS → guardar en Supabase ─────────────────────
 
-// Guardar cuenta
+// Guardar cuenta — conectado a Supabase
 async function saveCuenta() {
   const nombre = document.getElementById('c-nombre').value.trim();
   if (!nombre) { alert('Ingresa el nombre de la cuenta'); return; }
+  if (!currentUser) { alert('Sesión no activa. Por favor inicia sesión.'); return; }
   const color = document.querySelector('#c-color-picker .color-swatch.selected')?.dataset.color || '#1d4ed8';
   const { data, error } = await supa.from('dcemd_cuentas').insert({
     user_id: currentUser.id,
@@ -2509,20 +2510,20 @@ async function saveCuenta() {
     saldo_inicial: parseFloat(document.getElementById('c-saldo').value) || 0,
     color,
   }).select().single();
-  if (error) { showToast('Error: ' + error.message); return; }
+  if (error) { showToast('Error al guardar: ' + error.message); return; }
   DB.cuentas.push(mapCuenta(data));
   closeModal('modal-cuenta'); refreshAll(); showToast('Cuenta guardada ✓');
-};
+}
 
-// Guardar transacción manual
-const _origSaveTrx = saveTrxManual;
-saveTrxManual = async function() {
+// Guardar transacción manual — conectado a Supabase
+async function saveTrxManual() {
   const monto = parseFloat(document.getElementById('t-monto').value);
   const desc  = document.getElementById('t-desc').value.trim();
   const fecha = document.getElementById('t-fecha').value;
   const tipo  = document.getElementById('t-tipo').value;
   const cuentaId = document.getElementById('t-cuenta').value;
   if (!desc || !monto || !fecha || !cuentaId) { alert('Completa todos los campos'); return; }
+  if (!currentUser) { alert('Sesión no activa'); return; }
   const inter_cuenta = tipo === 'transferencia';
   const hash = makeHash(fecha, monto, desc, cuentaId);
   const dup  = DB.transacciones.some(t => t.hash === hash);
@@ -2538,14 +2539,14 @@ saveTrxManual = async function() {
   DB.transacciones.push(mapTrx(data));
   closeModal('modal-trx'); refreshAll();
   showToast(dup ? '⚠ Guardado (posible duplicado)' : 'Transacción guardada ✓');
-};
+}
 
-// Guardar inversión
-const _origSaveInv = saveInversion;
-saveInversion = async function() {
+// Guardar inversión — conectado a Supabase
+async function saveInversion() {
   const cliente = document.getElementById('i-cliente').value.trim();
   const monto   = parseFloat(document.getElementById('i-monto').value) || 0;
   if (!cliente || !monto) { alert('Ingresa cliente y monto'); return; }
+  if (!currentUser) { alert('Sesión no activa'); return; }
   const { data, error } = await supa.from('dcemd_inversiones').insert({
     user_id: currentUser.id, cliente, monto_invertido: monto, capital_pendiente: monto,
     interes_porc: parseFloat(document.getElementById('i-interes').value) || 0,
@@ -2558,11 +2559,10 @@ saveInversion = async function() {
   if (error) { showToast('Error: ' + error.message); return; }
   DB.inversiones.push(mapInv(data));
   closeModal('modal-inv'); refreshAll(); showToast('Inversión guardada ✓');
-};
+}
 
-// Guardar pago de inversión
-const _origSavePago = savePagoInversion;
-savePagoInversion = async function() {
+// Guardar pago de inversión — conectado a Supabase
+async function savePagoInversion() {
   const invId = document.getElementById('pago-inv-id').value;
   const inv   = getInversion(invId);
   if (!inv) return;
@@ -2570,8 +2570,8 @@ savePagoInversion = async function() {
   const tipoPago = document.getElementById('pago-tipo').value;
   const fecha    = document.getElementById('pago-fecha').value;
   if (!monto) { alert('Ingresa el monto'); return; }
+  if (!currentUser) { alert('Sesión no activa'); return; }
 
-  // Insertar pago
   const { data: pagoData, error: pagoErr } = await supa.from('dcemd_pagos_inv').insert({
     user_id: currentUser.id, inversion_id: invId, fecha, monto, tipo_pago: tipoPago,
     nota: document.getElementById('pago-nota').value.trim(),
@@ -2579,7 +2579,6 @@ savePagoInversion = async function() {
   if (pagoErr) { showToast('Error: ' + pagoErr.message); return; }
   DB.pagos_inv.push(mapPago(pagoData));
 
-  // Actualizar inversión
   const diasFrec = inv.frecuencia === 'semanal' ? 7 : inv.frecuencia === 'quincenal' ? 15 : 30;
   const updates = { total_intereses_cobrados: (inv.totalInteresesCobrados || 0) + (tipoPago === 'interes' ? monto : 0) };
   if (tipoPago === 'abono' || tipoPago === 'total') {
@@ -2596,44 +2595,39 @@ savePagoInversion = async function() {
     capital_pendiente: updates.capital_pendiente ?? inv.capitalPendiente }));
 
   closeModal('modal-pago-inv'); refreshAll(); showToast('Pago registrado ✓');
-};
+}
 
-// Toggle conciliado
-const _origToggleConcil = toggleConciliado;
-toggleConciliado = async function(id) {
+// Toggle conciliado — conectado a Supabase
+async function toggleConciliado(id) {
   const t = DB.transacciones.find(t => t.id === id);
   if (!t) return;
   t.conciliado = !t.conciliado;
   await supa.from('dcemd_transacciones').update({ conciliado: t.conciliado }).eq('id', id);
   refreshAll();
-};
+}
 
-// Eliminar cuenta
-const _origDelCuenta = deleteCuenta;
-deleteCuenta = async function(id) {
+// Eliminar cuenta — conectado a Supabase
+async function deleteCuenta(id) {
   if (!confirm('¿Eliminar esta cuenta y todos sus movimientos?')) return;
   await supa.from('dcemd_cuentas').delete().eq('id', id);
   DB.cuentas = DB.cuentas.filter(c => c.id !== id);
   DB.transacciones = DB.transacciones.filter(t => t.cuentaId !== id && t.cuentaDestinoId !== id);
   refreshAll(); showToast('Cuenta eliminada');
-};
+}
 
-// Eliminar transacción
-const _origDelTrx = deleteTrx;
-deleteTrx = async function(id) {
+// Eliminar transacción — conectado a Supabase
+async function deleteTrx(id) {
   if (!confirm('¿Eliminar esta transacción?')) return;
   await supa.from('dcemd_transacciones').delete().eq('id', id);
   DB.transacciones = DB.transacciones.filter(t => t.id !== id);
   refreshAll();
-};
+}
 
-// Guardar mes importado
-const _origSaveMes = saveMes;
-saveMes = async function() {
-  if (!currentUser) return;
+// Guardar mes importado — conectado a Supabase
+async function saveMes() {
+  if (!currentUser) { alert('Sesión no activa'); return; }
   const mesLabel = MESES_NAMES[parseInt(cargaMes)] + ' ' + cargaAno;
 
-  // Insertar todas las filas en Supabase
   const rows = allRows.map(r => ({
     user_id: currentUser.id,
     cuenta_id: r.cuentaId,
@@ -2664,7 +2658,7 @@ saveMes = async function() {
     </div>`;
   }
   allRows = []; refreshAll(); showToast(mesLabel + ' importado ✓');
-};
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // INIT con Supabase
