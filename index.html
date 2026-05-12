@@ -2439,12 +2439,20 @@ async function doLogout() {
   document.getElementById('main-app').style.display = 'none';
 }
 
-function onLoginSuccess(user) {
+async function onLoginSuccess(user) {
   currentUser = user;
   const nombre = user.user_metadata?.nombre || user.email.split('@')[0];
   document.getElementById('topbar-user-name').textContent = nombre;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('main-app').style.display = 'flex';
+
+  // Crear perfil automaticamente si no existe (fix foreign key error)
+  await supa.from('dcemd_perfiles').upsert({
+    id: user.id,
+    nombre: nombre,
+    email: user.email,
+  }, { onConflict: 'id' });
+
   loadUserData();
 }
 
